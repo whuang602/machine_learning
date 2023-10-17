@@ -1,4 +1,4 @@
-# All the Code and Projects for CMPSC165B Machine Learning
+# Code for CMPSC165B Machine Learning
 
 # Summary
 
