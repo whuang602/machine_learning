@@ -27,12 +27,12 @@ def run_train_test(training_input, testing_input):
                 "precision": #your_precision
             }
     """
-    
+    debug = False
     d = training_input[0][0]
     n_lst = [i for i in training_input[0][1:]]
     
     # [A,B,C] or potentially more
-    centroids = [np.array([0.0 for x in range(d)]) for i in range(len(n_lst))] # dependent on var d
+    centroids = np.array([[0.0 for x in range(d)] for i in range(len(n_lst))]) # dependent on var d
         
     i = 1 # temp var, end point for each class, accounts for the number of data in each class.
     # Ex. skip 1, up til but excl. 501, up til but excl. 1001, up til but excl. 1501
@@ -41,15 +41,21 @@ def run_train_test(training_input, testing_input):
             centroids[clss]+= np.array(line)
         centroids[clss][:] = [x/n_lst[clss] for x in centroids[clss]]
         i+=n_lst[clss]
-    print("centroids =", centroids)
+    
+    if debug:
+        print("centroids =", centroids)
     
     # [A/B, B/C, C/A]
-    vector_slope = [centroids[0]-centroids[1],centroids[1]-centroids[2],centroids[0]-centroids[2]]
-    print("slope =",vector_slope)
+    vector_slope = np.array([centroids[0]-centroids[1],centroids[1]-centroids[2],centroids[2]-centroids[0]])
+    
+    if debug:
+        print("slope =",vector_slope)
     
     # Halfway between each pair of centroids
-    halfway = [(centroids[0]+centroids[1])/2,(centroids[1]+centroids[2])/2,(centroids[2]+centroids[0])/2]
-    print("halfway point =", halfway)
+    halfway = np.array([(centroids[0]+centroids[1])/2,(centroids[1]+centroids[2])/2,(centroids[2]+centroids[0])/2])
+    
+    if debug:
+        print("halfway point =", halfway)
     
     # Find Perpendicular Bisector. Ex PB = midway_point + t * ortho_vector
     # orth = []
@@ -72,14 +78,19 @@ def run_train_test(training_input, testing_input):
     # slope[0] * x + slope[1] * y + slope[2] * z = slope[0] * halfway[0][0] + slope[1] * halfway[0][1] + slope[2] * halfway[0][2]
     d_offsets = []
     for i in range(len(n_lst)):
-        d_offsets.append(vector_slope[i][0] * halfway[i][0] + vector_slope[i][1] * halfway[i][1] + vector_slope[i][2] * halfway[i][2])
-    print("Offset =", d_offsets)
+        # d_offsets.append(vector_slope[i][0] * halfway[i][0] + vector_slope[i][1] * halfway[i][1] + vector_slope[i][2] * halfway[i][2])
+        d_offsets.append(np.sum(vector_slope[i] * halfway[i]))
+    
+    if debug:
+        print("Offset =", d_offsets)
     
     true_class, other_class, positive_side = ["A","B","C"], ["B", "C", "A"], []
     for i in range(len(n_lst)):
         # equivalent to vector_slope[index][0] * centroids[index][0] + vector_slope[index][1] * centroids[index][1] + vector_slope[index][2] * centroids[index][2] - d
         positive_side.append(true_class[i]) if (np.sum(vector_slope[i] * centroids[i]) - d_offsets[i]) > 0 else positive_side.append(other_class[i])
-    # print(positive_side)
+    
+    if debug:
+        print("positive side =",positive_side)
     
     # --------------------------------------- Testing ---------------------------------------
     
@@ -87,48 +98,62 @@ def run_train_test(training_input, testing_input):
     d = testing_input[0][0]
     n_lst = [ i for i in testing_input[0][1:] ]
     
-    i, index = 1, 0
+    i= 1
     # vector_slope: [ A/B , B/C, C/A]
     final_results = []
     for clss in range(len(n_lst)):
         for line in testing_input[i:i+n_lst[clss]]:
-            curr_index = 0
-            calc = np.sum(vector_slope[curr_index] * line) - d_offsets[curr_index]
+            # curr_index = 0
+            # calc = np.sum(vector_slope[curr_index] * line) - d_offsets[curr_index]
             # curr_index = 2 if (calc > 0 and positive_side[curr_index] == "A") or (calc < 0 and positive_side[curr_index] != "A") else 1
-            if calc > 0: # positive side of A/B
-                if positive_side[0] == "A": # point is A, now check A or C
-                    calc = np.sum(vector_slope[2] * line) - d_offsets[2]
-                    final_results.append("A") if ( calc >= 0 and positive_side[2] =="A" ) or (calc < 0 and positive_side[2] != "A") else final_results.append("C")
-                else: # point is B, now check B or C
-                    calc = np.sum(vector_slope[1] * line) - d_offsets[1]
-                    final_results.append("B") if ( calc >= 0 and positive_side[1] =="B" ) or (calc < 0 and positive_side[1] != "B") else final_results.append("C")
-                continue      
-            if calc < 0: # negative side of A/B
-                if positive_side[0] == "A": # point is B
-                    calc = np.sum(vector_slope[1] * line) - d_offsets[1]
-                    final_results.append("B") if ( calc >= 0 and positive_side[1] =="B" ) or (calc < 0 and positive_side[1] != "B") else final_results.append("C")
-                else: # point is A
-                    calc = np.sum(vector_slope[2] * line) - d_offsets[2]
-                    final_results.append("A") if ( calc >= 0 and positive_side[2] =="A" ) or (calc < 0 and positive_side[2] != "A") else final_results.append("C")
-                continue
-            # on the A/B discrimnant function plane (tie), prefer A -> test A or C 
-            calc = np.sum(vector_slope[2] * line) - d_offsets[2]
-            final_results.append("A") if ( calc >= 0 and positive_side[2] =="A" ) or (calc < 0 and positive_side[2] != "A") else final_results.append("C")
+            
+            # -------------------- This chunk is for if positive side isn't correctly ordered --------------------------------
+            # if np.sum(vector_slope[0] * line) - d_offsets[0] > 0: # positive side of A/B
+            #     if positive_side[0] == "A": # point is A, now check A or C
+            #         calc = np.sum(vector_slope[2] * line) - d_offsets[2]
+            #         final_results.append("A") if (calc == 0) or ( calc > 0 and positive_side[2] =="A" ) or (calc < 0 and positive_side[2] != "A") else final_results.append("C")
+            #     else: # point is B, now check B or C
+            #         calc = np.sum(vector_slope[1] * line) - d_offsets[1]
+            #         final_results.append("B") if (calc == 0) or  (calc > 0 and positive_side[1] =="B" ) or (calc < 0 and positive_side[1] != "B") else final_results.append("C")
+            #     continue      
+            # if np.sum(vector_slope[0] * line) - d_offsets[0] < 0: # negative side of A/B
+            #     if positive_side[0] == "A": # point is B
+            #         calc = np.sum(vector_slope[1] * line) - d_offsets[1]
+            #         final_results.append("B") if (calc == 0) or ( calc > 0 and positive_side[1] =="B" ) or (calc < 0 and positive_side[1] != "B") else final_results.append("C")
+            #     else: # point is A
+            #         calc = np.sum(vector_slope[2] * line) - d_offsets[2]
+            #         final_results.append("A") if (calc == 0) or ( calc > 0 and positive_side[2] =="A" ) or (calc < 0 and positive_side[2] != "A") else final_results.append("C")
+            #     continue
+            # # on the A/B discrimnant function plane (tie), prefer A -> test A or C 
+            # calc = np.sum(vector_slope[2] * line) - d_offsets[2]
+            # final_results.append("A") if (calc==0) or ( calc > 0 and positive_side[2] =="A" ) or (calc < 0 and positive_side[2] != "A") else final_results.append("C")
+            
+            # ----------------------------- Normally this should be fine -----------------------------
+            if np.sum(vector_slope[0] * line) - d_offsets[0] >= 0: # point is A
+                calc = np.sum(vector_slope[2] * line) - d_offsets[2]
+                final_results.append("C") if calc >= 0 else final_results.append("A")
+            else: # point is B
+                calc = np.sum(vector_slope[1] * line) - d_offsets[1]
+                final_results.append("B") if calc >= 0 else final_results.append("C")
         i+=n_lst[clss]
-        index+=1
     
-    print(final_results)
+    if debug:
+        print(final_results)
     
     confusion_matrix = [[0,0,0] for x in range(3)]
     convenience = {"A":0, "B":1, "C":2}
-    i, index = 1, 0
+    i, index = 0, 0 # accidentally set i = 1
+    counter = 0
     for clss in range(len(n_lst)):
         for result in final_results[i:i+n_lst[clss]]:
             confusion_matrix[convenience[result]][convenience[true_class[index]]]+=1 # imagine writing nested switch statements, yikes
+            counter+=1
         i+=n_lst[clss]
         index+=1
-    for i in range(3):
-        print(confusion_matrix[i])
+        
+    if debug:
+        for i in range(3):
+            print(confusion_matrix[i])
     
     # [True Positive, False Positive, False Negative, True Negative]
     confusion_matrix_specific = [[0.0,0.0,0.0,0.0] for x in range(3)]
@@ -150,7 +175,9 @@ def run_train_test(training_input, testing_input):
     confusion_matrix_specific[2][1]+=confusion_matrix[2][0]+confusion_matrix[2][1]
     confusion_matrix_specific[2][2]+=confusion_matrix[0][2]+confusion_matrix[1][2]
     confusion_matrix_specific[2][3]+=confusion_matrix[0][0]+confusion_matrix[0][1]+confusion_matrix[1][0]+confusion_matrix[1][1]
-    print(confusion_matrix_specific)
+    
+    if debug:
+        print(confusion_matrix_specific)
             
     pre_average_results = [ np.array([0.0,0.0,0.0,0.0,0.0]) for x in range(3)]
     
@@ -175,11 +202,9 @@ def run_train_test(training_input, testing_input):
                "accuracy": (pre_average_results[0][3]+pre_average_results[1][3]+pre_average_results[2][3])/3,
                "precision": (pre_average_results[0][4]+pre_average_results[1][4]+pre_average_results[2][4])/3
                }
-    # results = {"tpr": 0.8933333333333334,
-    #            "fpr": 0.05333333333333334,
-    #            "error_rate": 0.07111111111111111,
-    #            "accuracy": 0.9288888888888889,
-    #            "precision": 0.8923242082662372}
-    print(results)
+
+    
+    if debug:
+        print(results)
     
     return results
