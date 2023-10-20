@@ -1,4 +1,4 @@
-# Code for CMPSC165B Machine Learning
+# Machine Learning Code
 
 # Summary
 
